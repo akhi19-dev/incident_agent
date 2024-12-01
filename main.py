@@ -31,6 +31,7 @@ from runbook_agent.incident_webhooks.app import init
 from runbook_agent.runbook_executor.runbook_execution_factory import (
     ExecutionServiceFactory,
 )
+import os
 
 # Create FastAPI app instance
 app = FastAPI()
@@ -50,7 +51,16 @@ async def init_runbook_source_manager():
     # Define the configuration for the platform (Azure, for example)
     config = {
         "platform": "azure",
-        "azure": WebhookConfig(),
+        "azure": WebhookConfig(
+            tenant_id=os.getenv("AZURE_TENANT_ID"),
+            client_id=os.getenv("AZURE_CLIENT_ID"),
+            client_secret=os.getenv("AZURE_CLIENT_SECRET"),
+            subscription_id=os.getenv("AZURE_SUBSCRIPTION_ID"),
+            resource_group=os.getenv("AZURE_RESOURCE_GROUP"),
+            automation_account=os.getenv("AZURE_AUTOMATION_ACCOUNT"),
+            webhook_endpoint_url=os.getenv("AZURE_WEBHOOK_ENDPOINT"),
+            webhook_name=os.getenv("AZURE_WEBHOOK_NAME"),
+        ),
     }
     await init_prisma_client()
     # Initialize the necessary services
@@ -62,10 +72,10 @@ async def init_runbook_source_manager():
     )
     executor = ExecutionServiceFactory.create_executor(
         platform="azure",
-        tenant_id="",
-        client_id="",
-        client_secret="",
-        subscription_id="",
+        tenant_id=os.getenv("AZURE_TENANT_ID"),
+        client_id=os.getenv("AZURE_CLIENT_ID"),
+        client_secret=os.getenv("AZURE_CLIENT_SECRET"),
+        subscription_id=os.getenv("AZURE_SUBSCRIPTION_ID"),
     )
 
     init(

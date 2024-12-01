@@ -21,6 +21,7 @@ from runbook_agent.runbook_sources.services.azure_service.azure_runbook_models i
     WebhookConfig,
 )
 import requests
+import os
 
 
 # Create a router instance
@@ -119,10 +120,10 @@ async def poll_job(id: str, sys_id: str):
         return update_description(
             status,
             output,
-            "https://dev209832.service-now.com",
+            os.getenv("SERVICE_NOW_URL"),
             sys_id,
-            "yatish@futurepath.ai",
-            "Best@123",
+            os.getenv("SERVICE_NOW_USERNAME"),
+            os.getenv("SERVICE_NOW_PASSWORD"),
         )
 
     azureExecutor.wait_for_runbook_completion(
