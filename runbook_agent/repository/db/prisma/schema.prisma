@@ -1,0 +1,36 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator python_client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = "5"
+  interface            = "asyncio"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model automation_script_documents {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid  // UUID type for id, automatically generated
+  name          String
+  source        String
+  published_time DateTime
+  is_indexed     Boolean
+  description   String?
+  os_supported   String[] // Array of strings to store supported OS
+  args          String[] // Array of strings to store runbook arguments
+  created_time   DateTime @default(now())  // Default to current time on creation
+  updated_time   DateTime @default(now()) @updatedAt  // Automatically updates to current time on update
+  type          String
+  tags          String[] // Array of strings to store tags
+}
