@@ -46,13 +46,14 @@ From the provided runbook content, extract and structure the following details:
    - Provide an **array** of the **operating systems** on which this runbook is designed to run. List each OS explicitly.
 
 4. **array_of_args**:
-   - Refer to runbook content and provide an array of **specific arguments** that **must be provided** by the user to execute the runbook correctly. These arguments are typically required inputs like file paths, resource names, process IDs, or other identifiers needed for the script to function.
-   - If no arguments are required return empty list
+   - Refer to runbook content and provide an array of **specific parameters** that **needs to be passed** by the user to execute the runbook correctly. These parameters are passed to the runbook from outside and are not defined/set in runbook itself
+   - If no parameters are required return empty list
 
 5. **arg_related_functions_to_call**:
-   - If there are any **functions** (from the provided list) that can be used to **extract** the arguments, include them in an **array**. Only list functions that are **directly related** to extracting or interacting with the required arguments. Keep the function string as is
-   - **Important**: **Only include functions if they are 100% clear and unambiguous** in their relation to the arguments. If there is any **uncertainty or ambiguity** in selecting a function, it is better to **return no function** than risk choosing one that could cause issues. 
-   - We prioritize **precision over completeness** — if you are unsure about a function's relevance to an argument, it's okay to return an empty array or simply leave it blank.
+    - List functions from the given list of function names and descriptions where both the function name and description clearly match the parameter context you need to extract.
+    - Only include functions where the description or functionality is directly related to the parameter passed to the script.
+    - If the relationship is not clear or the function description does not closely match the parameter purpose, do not include the function.
+    - Example: If the argument is "ServerID", you should only list functions where the script uses or processes the ServerID directly. If a function getServerID() is present, return getServerID() else return empty
 
 6. **user_queries**:
    - Provide an **array** of **possible queries** that a user might ask in incident management. These queries should be related to issues that can be **resolved** by running this runbook.
@@ -147,7 +148,7 @@ def get_runbook_analysis_message(runbook: str, list_of_functions: List[str]) -> 
         },
         {
             "role": "user",
-            "content": f"Runbook content: {runbook},\n list of functions: {list_of_functions}",
+            "content": f"Runbook content: {runbook},\n list of functions with description: {list_of_functions}",
         },
     ]
     return messages
@@ -167,12 +168,15 @@ def get_vm_names_from_description_prompt(description: str) -> str:
     return messages
 
 
-list_of_function = [
-    "get_subscription_id()",
-    "get_resource_group_name()",
-    "get_tenant_id()",
-    "get_VM_names()",
-]
+list_of_function = {
+    "get_subscription_id()": "This will return the Azure subscription ID associated with the account.",
+    "get_resource_group_name()": "Returns the name of the Azure resource group where resources are located.",
+    "get_tenant_id()": "Returns the Azure Active Directory tenant ID associated with the subscription.",
+    "get_VM_names()": "Returns the names of vm names",
+    "get_aws_access_key()": "Return access key for AWS",
+    "get_aws_secret_key()": "Return secret for AWS",
+    "get_aws_region()": "Returns aws region",
+}
 
 
 def get_subscription_id():
@@ -185,6 +189,18 @@ def get_resource_group_name():
 
 def get_tenant_id():
     return os.getenv("TENANT_ID")
+
+
+def get_aws_access_key():
+    return os.getenv("AWS_ACCESS_KEY_ID")
+
+
+def get_aws_secret_key():
+    return os.getenv("AWS_SECRET_ACCESS_KEY")
+
+
+def get_aws_region():
+    return os.getenv("AWS_REGION")
 
 
 def get_VM_names(description: str) -> VMNamesResponse:
@@ -216,4 +232,7 @@ function_map = {
     "get_resource_group_name()": get_resource_group_name,
     "get_tenant_id()": get_tenant_id,
     "get_vm_names()": get_VM_names,
+    "get_aws_access_key()": get_aws_access_key,
+    "get_aws_secret_key()": get_aws_secret_key,
+    "get_aws_region()": get_aws_region,
 }

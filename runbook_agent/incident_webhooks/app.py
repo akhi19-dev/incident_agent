@@ -22,6 +22,7 @@ from runbook_agent.runbook_sources.services.azure_service.azure_runbook_models i
 )
 import requests
 import os
+from datetime import datetime
 
 
 # Create a router instance
@@ -160,7 +161,7 @@ def update_description(status, output, instance_url, sys_id, username, password)
 
     # The payload to update the description
     payload = {
-        "description": f"{current_description}-----------------------------------\nJob execution status : {status} \n\n Output:{output}\n-----------------------------------\n"
+        "description": f"{current_description}-----------------------------------\nJob execution status : {status} at {datetime.now().strftime("%d-%m-%Y %H:%M")} \n\nOutput:\n{output}\n-----------------------------------\n"
     }
 
     # Make the PUT request to update the description

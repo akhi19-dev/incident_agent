@@ -54,12 +54,15 @@ class AzureRunbookExecutor:
 
         # Create RunbookAssociationProperty and pass the runbook name
         runbook_association = RunbookAssociationProperty(name=runbook_name)
+        run_on = ""
+        if runbook_name == "cpu_and_jvm_logs":
+            run_on = "test"
 
         # Create JobCreateParameters and pass the correct values
         job_create_parameters = JobCreateParameters(
             runbook=runbook_association,  # Assign RunbookAssociationProperty
             parameters=parameters,  # Pass parameters dictionary
-            run_on="",  # Set run_on to "" for cloud worker (or specify Hybrid Worker group name)
+            run_on=run_on,  # Set run_on to "" for cloud worker (or specify Hybrid Worker group name)
         )
 
         job_name = str(uuid.uuid4())
@@ -148,11 +151,10 @@ class AzureRunbookExecutor:
             for item in response_data.get("value", []):
                 # Extract summary and time from each stream item
                 summary = item["properties"].get("summary", "")
-                time = item["properties"].get("time", "")
 
                 # Concatenate summary and time, and add to the summaries list
                 if summary:  # Only add the summary if it's not empty
-                    summaries.append(f"\nTime: {time}\nSummary: {summary}\n")
+                    summaries.append(f"{summary}")
 
             # Join all summaries into a single string with newline characters
             return "\n".join(summaries)
