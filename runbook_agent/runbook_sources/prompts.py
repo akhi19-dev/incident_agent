@@ -1,7 +1,8 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 import os
 from pydantic import BaseModel
 from runbook_agent.llms.open_ai import chat_completion_request_instructor
+import json
 
 
 class RunbookDetails(BaseModel):
@@ -11,6 +12,13 @@ class RunbookDetails(BaseModel):
 
 class RunbookSelectionResponse(BaseModel):
     doc_id: str
+    description: str
+
+
+class ActionSequenceResponse(BaseModel):
+    func_name: Optional[str]
+    args: Optional[Dict[str, str]]
+    ambiguity: Optional[str]
 
 
 class VMNamesResponse(BaseModel):
@@ -117,6 +125,7 @@ runbook_selection_prompt = """
 **Return Format:**
 - Return the `doc_id` of the most appropriate runbook based on the analysis.
 - If no runbook fits, return an empty `doc_id` as `""`.
+- Return a brief description of what the runbook does as `description`
 
 [Runbook Format]:
 - A list of the top 5 runbooks is provided in the following format:
@@ -125,47 +134,132 @@ runbook_selection_prompt = """
    `description`: <Description of what the runbook does>
 """
 
+base_action_sequence_prompt = """
+You are an expert system designed to analyze provided incident descriptions and map them to a predefined set of functions with strict adherence to accuracy. Your task is to determine which functions should be called based on the input description, infer the exact arguments from the description to pass, and handle scenarios where multiple actions are requested.
 
-def runbook_selection(description: str, runbooks: RunbookDetails) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": runbook_selection_prompt,
-        },
-        {
-            "role": "user",
-            "content": f"Runbooks: {runbooks},\n Incident description: {description}",
-        },
-    ]
-    return messages
+### Instructions:
+
+1. **Input Description Analysis**:
+   - Analyze the provided incident description to identify all distinct actions being requested, in the order they appear.
+   - Extract only the information explicitly mentioned in the description or clearly inferred without ambiguity.
+   - Include any specific entity or identifier mentioned in the description in your analysis.
+   - If any issue is being reported, actions should be taken immediately, and the function must be mapped accordingly.
+
+2. **Entity-Specific Actions**:
+   - Ensure actions are linked to the specific entity mentioned in the description by the user.
+   - If the entity is ambiguous or missing, include this in the ambiguity note.
+
+3. **Function Mapping**:
+   - For each described action, map it to a function from the predefined list.
+   - Extract or infer arguments directly from the description where possible.
+   - If a described action does not provide all required arguments explicitly or contains ambiguity, do not output the function call. Include an ambiguity note in the output.
+   - Required arguments (marked as `true`) must either be explicitly provided in the description or inferred without ambiguity. Optional arguments can be omitted.
+
+4. **Output Requirements**:
+   - For each identified action that can be fully matched:
+     - Output the function name and the exact arguments to pass, clearly derived from the description.
+     - Use the following output format for each action:
+       ```
+       functionName=<function_name>
+       argument1=value1
+       argument2=value2
+       ```
+   - If multiple actions are requested, list them sequentially in the output, maintaining their order in the description.
+   - For any ambiguities, include them at the beginning of the output using the format:
+       ```
+       Ambiguity: [Description of the issue]
+       ```
+
+5. **Predefined Function List**:
+   {function_list_json}
+
+6. **Ambiguity Handling**:
+   - If any described action does not clearly specify all required arguments or is ambiguous, include an ambiguity note in the output.
+   - If an action does not match any function from the predefined list, include it under ambiguity notes stating that no matching function was found.
+
+7. **Example**:
+   - **Input Description**: "Monitor server resources and validate user input."
+   - **Function List**:
+     - **Function Name**: monitorResources
+       - Description: Monitors the resource usage of a specified server.
+       - Required Arguments: `serverName`
+     - **Function Name**: validateInput
+       - Description: Validates the specified input.
+       - Required Arguments: `inputData`
+   - **Output**:
+     ```
+     Ambiguity: Missing serverName for monitoring resources.
+     Ambiguity: Missing inputData for validating user input.
+     ```
+
+8. **Notes**:
+   - Ensure the output contains all identified actions requested in the description, in sequence.
+   - Maintain the order of actions and ambiguities as they appear in the input description.
+   - Avoid making assumptions or using default values for missing arguments.
+   - Only output actions with all required arguments provided.
+   - Clearly format ambiguities as specified.
+"""
 
 
-def get_runbook_analysis_message(runbook: str, list_of_functions: List[str]) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": runbook_analysis_prompt,
-        },
-        {
-            "role": "user",
-            "content": f"Runbook content: {runbook},\n list of functions with description: {list_of_functions}",
-        },
-    ]
-    return messages
+# Define the list of functions as dictionaries
+function_list = [
+    {
+        "FunctionName": "SchdeuleTaskForExecution",
+        "Description": "Schedules the mentioned task to be executed at a specified time. Task : {description}",
+        "Arguments": [
+            {
+                "Name": "start_time",
+                "Required": True,
+                "Description": "The time at which the task should be executed for the first time. Must be in ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SS±HH:MM'). Example: '2024-12-22T08:00:00+05:30' for 22nd December 2024 at 8:00 AM IST.",
+            },
+            {
+                "Name": "expiry_time",
+                "Required": False,
+                "Description": "Specifies time on which the schdeule will stop executing the task. Must be in ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SS±HH:MM'). Example: '2024-12-22T08:00:00+05:30' for 22nd December 2024 at 8:00 AM IST.",
+            },
+            {
+                "Name": "interval",
+                "Required": True,
+                "Description": "Specifies the numeric time interval at which the task should be executed. Will be used along with frequency argument",
+            },
+            {
+                "Name": "frequency",
+                "Required": True,
+                "Description": "Determines how often the task should run. Accepted values are: OneTime (Executes only once at the specified time), Day (Runs daily at the specified interval), Hour (Runs hourly), Week (Runs weekly), Month (Runs monthly). Is dependent on interval value.",
+            },
+            {
+                "Name": "time_zone",
+                "Required": True,
+                "Description": "The time zone for the schedule in the **IANA format**",
+            },
+        ],
+        "Examples": [
+            {
+                "Description": "Schedule task X on 8 December 2024 at 8 pm IST",
+                "Argument inference": "start_time - '2024-12-8T20:00:00+05:30', interval-1(Since task is to be executed once), frequency-OneTime, time_zone - Asia/Kolkata (IANA for IST)",
+            },
+            {
+                "Description": "Schedule task X everyday from 23 December 2024 to 26 December 2024 at 5 pm IST",
+                "Argument inference": "start_time - 23 December 2024, 5 PM IST (schedule start time); expiry_time - 26 December 2024, 5 PM IST (schedule expiry); interval - 1 (task to be executed once per day); frequency - Daily; time_zone - Asia/Kolkata (IANA for IST)",
+            },
+        ],
+    },
+    {
+        "FunctionName": "TriggerTaskImmediately",
+        "Description": "Triggers mentioned task or takes action on the described issue. Task - {description}",
+        "Arguments": [],
+        "Examples": [
+            {
+                "Description": "High CPU usage on XXX",
+            }
+        ],
+    },
+]
 
-
-def get_vm_names_from_description_prompt(description: str) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": fetch_VM_name_from_description_prompt,
-        },
-        {
-            "role": "user",
-            "content": f"Description: {description}",
-        },
-    ]
-    return messages
+function_list_json = json.dumps(function_list, indent=4)
+action_sequence_prompt = base_action_sequence_prompt.replace(
+    "{function_list_json}", function_list_json
+)
 
 
 list_of_function = {
@@ -214,6 +308,79 @@ def get_VM_names(description: str) -> VMNamesResponse:
     return response
 
 
+function_map = {
+    "get_subscription_id()": get_subscription_id,
+    "get_resource_group_name()": get_resource_group_name,
+    "get_tenant_id()": get_tenant_id,
+    "get_vm_names()": get_VM_names,
+    "get_aws_access_key()": get_aws_access_key,
+    "get_aws_secret_key()": get_aws_secret_key,
+    "get_aws_region()": get_aws_region,
+}
+
+
+def runbook_selection(description: str, runbooks: RunbookDetails) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": runbook_selection_prompt,
+        },
+        {
+            "role": "user",
+            "content": f"Runbooks: {runbooks},\n Incident description: {description}",
+        },
+    ]
+    return messages
+
+
+def get_runbook_analysis_message(runbook: str, list_of_functions: List[str]) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": runbook_analysis_prompt,
+        },
+        {
+            "role": "user",
+            "content": f"Runbook content: {runbook},\n list of functions with description: {list_of_functions}",
+        },
+    ]
+    return messages
+
+
+def get_vm_names_from_description_prompt(description: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": fetch_VM_name_from_description_prompt,
+        },
+        {
+            "role": "user",
+            "content": f"Description: {description}",
+        },
+    ]
+    return messages
+
+
+def get_action_sequence_prompt(
+    ticket_description: str,
+    selected_runbook_description: str,
+    user_entity_information: str,
+) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": action_sequence_prompt.replace(
+                "{description}", selected_runbook_description
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Incident description: {ticket_description}. {user_entity_information}",
+        },
+    ]
+    return messages
+
+
 def select_runbook_for_execution(
     description: str, runbooks: RunbookDetails
 ) -> RunbookSelectionResponse:
@@ -227,12 +394,20 @@ def select_runbook_for_execution(
     return response
 
 
-function_map = {
-    "get_subscription_id()": get_subscription_id,
-    "get_resource_group_name()": get_resource_group_name,
-    "get_tenant_id()": get_tenant_id,
-    "get_vm_names()": get_VM_names,
-    "get_aws_access_key()": get_aws_access_key,
-    "get_aws_secret_key()": get_aws_secret_key,
-    "get_aws_region()": get_aws_region,
-}
+def action_sequences(
+    ticket_description: str,
+    selected_runbook_description: str,
+    user_entity_information: str,
+) -> RunbookSelectionResponse:
+    response = chat_completion_request_instructor(
+        get_action_sequence_prompt(
+            ticket_description=ticket_description,
+            selected_runbook_description=selected_runbook_description,
+            user_entity_information=user_entity_information,
+        ),
+        model="gpt-4o-mini",
+        temperature=0.2,
+        max_tokens=4000,
+        response_model=ActionSequenceResponse,
+    )
+    return response

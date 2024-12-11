@@ -1,7 +1,11 @@
 import time
 from azure.identity import ClientSecretCredential
 from azure.mgmt.automation import AutomationClient
-from azure.mgmt.automation.models import JobCreateParameters, RunbookAssociationProperty
+from azure.mgmt.automation.models import (
+    JobCreateParameters,
+    RunbookAssociationProperty,
+    ScheduleCreateOrUpdateParameters,
+)
 import uuid
 
 
@@ -79,6 +83,87 @@ class AzureRunbookExecutor:
             f"Runbook {runbook_name} has been triggered successfully with job ID: {job.id}"
         )
         return job_name
+
+    def schedule_runbook_execution(
+        self,
+        resource_group: str,
+        automation_account_name: str,
+        schedule_name: str,
+        runbook_name: str,
+        parameters: dict,
+        start_time: str,  # Mandatory: Schedule start time in ISO 8601 format
+        expiry_time: str = None,  # Optional: Expiry time for the schedule
+        interval: int = 1,  # Interval for recurrence (default 1)
+        frequency: str = "OneTime",  # Mandatory: "OneTime", "Day", "Week", etc.
+        time_zone: str = "UTC",  # Mandatory: Time zone
+        week_days: list[
+            str
+        ] = None,  # Optional: Days of the week (e.g., ["Monday", "Wednesday"])
+        month_days: list[int] = None,  # Optional: Days of the month (e.g., [1, 15, 31])
+    ):
+        """
+        Schedules a runbook execution based on the provided parameters.
+
+        :param resource_group: Resource group of the automation account.
+        :param automation_account_name: Name of the automation account.
+        :param schedule_name: Name of the schedule to create.
+        :param runbook_name: Name of the runbook to associate with the schedule.
+        :param parameters: Parameters to pass to the runbook.
+        :param start_time: Mandatory. Start time of the schedule in ISO 8601 format.
+        :param expiry_time: Optional. Expiry time of the schedule in ISO 8601 format.
+        :param interval: Interval for the schedule recurrence (default: 1).
+        :param frequency: Mandatory. Frequency of the schedule ("OneTime", "Day", "Week", etc.).
+        :param time_zone: Mandatory. Time zone for the schedule.
+        :param week_days: Optional. List of days of the week to run the job (e.g., ["Monday", "Wednesday"]).
+        :param month_days: Optional. List of days of the month to run the job (e.g., [1, 15, 31]).
+        """
+        # Validate mandatory arguments
+        if not start_time:
+            raise ValueError("start_time is mandatory and must be in ISO 8601 format.")
+        if not frequency:
+            raise ValueError("frequency is mandatory and must be specified.")
+        if frequency not in ["OneTime", "Day", "Hour", "Week", "Month", "Minute"]:
+            raise ValueError(f"Invalid frequency: {frequency}. Choose a valid option.")
+
+        # Build the schedule parameters
+        schedule_params = ScheduleCreateOrUpdateParameters(
+            name=schedule_name,
+            description=f"Schedule for runbook {runbook_name}",
+            start_time=start_time,
+            expiry_time=expiry_time,
+            interval=interval,
+            frequency=frequency,
+            time_zone=time_zone,
+            week_days=week_days,
+            month_days=month_days,
+        )
+
+        # Create the schedule
+        schedule = self.automation_client.schedule.create_or_update(
+            resource_group_name=resource_group,
+            automation_account_name=automation_account_name,
+            schedule_name=schedule_name,
+            parameters=schedule_params,
+        )
+
+        print(f"Schedule '{schedule_name}' created successfully.")
+
+        # Create a job schedule to associate the runbook with the schedule
+        job_schedule_id = str(uuid.uuid4())
+        job_schedule_params = {
+            "schedule": {"name": f"{schedule_name}"},
+            "runbook": {"name": runbook_name},
+            "parameters": parameters,
+        }
+        job_schedule = self.automation_client.job_schedule.create(
+            resource_group_name=resource_group,
+            automation_account_name=automation_account_name,
+            job_schedule_id=job_schedule_id,
+            parameters=job_schedule_params,
+        )
+
+        print(f"Runbook '{runbook_name}' associated with schedule '{schedule_name}'.")
+        return job_schedule
 
     def get_runbook_status(self, resource_group, automation_account_name, job_name):
         # Retrieve the status of the runbook job

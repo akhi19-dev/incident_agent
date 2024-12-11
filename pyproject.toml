@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "aiops-engine"
+name = "runbook_agent"
 version = "0.1.0"
 description = ""
 authors = ["Akhilesh Jain <jainakhilesh080@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.12"
 lancedb = "^0.16.0"
 azure-mgmt-monitor = "^6.0.2"
 azure-identity = "^1.19.0"

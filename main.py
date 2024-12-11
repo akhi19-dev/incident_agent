@@ -84,6 +84,7 @@ async def init_runbook_source_manager():
         r=repository,
         executor=executor,
         c=config.get("azure"),
+        client=get_prisma_client()
     )
 
     indexingService = IndexingEngine(
@@ -104,7 +105,6 @@ async def init_runbook_source_manager():
     # executor = ExecutionServiceFactory.create_executor(...)
     # job_id = executor.trigger_runbook(...)
     # executor.wait_for_runbook_completion(...)
-
 
 # FastAPI startup event to initialize services
 @app.on_event("startup")
