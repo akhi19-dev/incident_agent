@@ -15,11 +15,99 @@ generator python_client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
 }
 
+model Event {
+    id                    String    @id @default(uuid())
+    org_id                String // Organization ID
+    description           String
+    manager               String
+    metric_type           String
+    severity              String
+    created_at            DateTime  @db.Timestamptz // Use timezone-aware timestamp
+    hostname              String
+    service               String
+    tags                  Json?
+    additional_info       String?
+    correlation_key       String?
+    occurrence_count      Int       @default(1)
+    first_occurrence_time DateTime? @db.Timestamptz // Use timezone-aware timestamp
+    last_occurrence_time  DateTime? @db.Timestamptz // Use timezone-aware timestamp
+    alerts    Alert[]
+    incidents Incident[]
+}
+model Incident {
+    id              String   @id @default(uuid())
+    org_id          String // Organization ID
+    subject         String // Subject summarizing the incident
+    start_time      DateTime @db.Timestamptz // Use timezone-aware timestamp
+    end_time        DateTime @db.Timestamptz // Use timezone-aware timestamp
+    severity        String // Severity of the incident
+    description     String // Detailed description, including correlated alerts
+    status          String // Current status of the incident ("new", "in-progress", etc.)
+    additional_info Json? // Additional information as a JSON object
+    urgency         Int // Urgency level derived from severity
+    impact          Int // Impact level derived from severity
+    created_at      DateTime @default(now()) @db.Timestamptz // Timestamp of when the incident was recorded
+    updated_at      DateTime @updatedAt @db.Timestamptz // Timestamp of when the incident was last updated
+    url String?
+    runbooks Json?
+    runbook_executed Boolean  @default(false)
+    runbook_link     String?
+    runbook_name     String?
+    runbook_status   String?
+    runbook_output   String?
+    alerts Alert[]
+    events Event[]
+}
+model Alert {
+    id          String    @id @default(uuid())
+    org_id      String // Organization ID
+    subject     String // Brief description of the alert
+    description String // Detailed alert description
+    severity    String // Severity level of the alert
+    status      String // Updated to use Status enum
+    start_time  DateTime  @db.Timestamptz // Use timezone-aware timestamp
+    end_time    DateTime? @db.Timestamptz // Use timezone-aware timestamp
+    events    Event[]
+    incidents Incident[]
+}
+model Metric {
+    id          String   @id @default(uuid())
+    metric_type String
+    org_id      String
+    created_at  DateTime @db.Timestamptz // Use timezone-aware timestamp
+    value       Float
+    hostname    String
+    tags        Json?
+}
+model Runbook {
+    id           String   @id @default(uuid())
+    runbook_name String
+    org_id       String
+    incident_id  String
+    job_name     String   @unique
+    status       String
+    output       String?
+    timestamp    DateTime @default(now()) @db.Timestamptz(6)
+}
+enum IntegrationType {
+    AZURE
+    PROMETHEUS
+    AWS
+    SERVICENOW
+}
+model Integration {
+    id                 String          @id @default(uuid())
+    org_id             String
+    integration_type   IntegrationType
+    integration_config Json
+    created_at         DateTime        @default(now()) @db.Timestamptz(6)
+    updated_at         DateTime        @updatedAt @db.Timestamptz(6)
+}
 model automation_script_documents {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid  // UUID type for id, automatically generated
   name          String
@@ -33,4 +121,19 @@ model automation_script_documents {
   updated_time   DateTime @default(now()) @updatedAt  // Automatically updates to current time on update
   type          String
   tags          String[] // Array of strings to store tags
+}
+model incident_management {
+    id                             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    zenoss_incidentmanagement_number String
+    event_state                    String   
+    severity                       Int      
+    device                         String  
+    component                      String  
+    event_class                    String  
+    summary                        String  
+    first_time                     DateTime 
+    last_time                      DateTime 
+    count                          Int      
+    created_at DateTime @default(now()) @db.Timestamptz // Timestamp for record creation
+    updated_at DateTime @updatedAt @db.Timestamptz // Timestamp for record update
 }

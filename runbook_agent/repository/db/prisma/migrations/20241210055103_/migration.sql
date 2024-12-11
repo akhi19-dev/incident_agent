@@ -1,3 +1,12 @@
+/*
+  Warnings:
+
+  - You are about to drop the `automation_runbook_documents` table. If the table is not empty, all the data it contains will be lost.
+
+*/
+-- DropTable
+DROP TABLE "automation_runbook_documents";
+
 -- CreateTable
 CREATE TABLE "automation_script_documents" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
