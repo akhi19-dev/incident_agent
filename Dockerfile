@@ -12,7 +12,7 @@ RUN poetry config virtualenvs.create false
 RUN poetry install 
 # Copy the current directory contents into the container
 COPY . .
-RUN cd event_consumer/core/prisma && prisma generate
+RUN cd runbook_agent/repository/db/prisma && prisma generate
 
 
 # Expose the port FastAPI runs on
