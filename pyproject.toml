@@ -18,6 +18,7 @@ adlfs = "^2024.7.0"
 tenacity = "^8.2.0, <8.4.0 || >8.4.0, <9.0.0"
 openai = "^1.55.1"
 instructor = "1.5.1"
+prisma = "^0.15.0"
 
 
 [build-system]
