@@ -1,8 +1,5 @@
 # main.py
 from fastapi import FastAPI
-import sys
-
-sys.path.append("/Users/akhileshjain/Documents/FuturePath/incident_agent")
 from runbook_agent.repository.automation_runbook_documents.automation_runbook_documents_service import (
     getAutomationRunbookService,
 )
