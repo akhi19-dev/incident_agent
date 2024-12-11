@@ -214,7 +214,9 @@ async def poll_job(id: str, sys_id: str, vm: str, runbook_name: str):
                     output += "\n"
                     output += "-" * 25 + "\n"
                     output += f"Potential Issue: {issue.potential_issue}\n"
+                    output += "-" * 25 + "\n"
                     output += f"Log Items: {issue.log_items}\n"
+                    output += "-" * 25 + "\n"
                     output += f"Insights: {issue.insights}\n"
         update_incident_table("completed", output, sys_id, runbook_name)
         return update_description(
