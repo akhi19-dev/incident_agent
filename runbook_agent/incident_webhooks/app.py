@@ -198,26 +198,29 @@ async def take_incident_action(payload: Payload):
 async def poll_job(id: str, sys_id: str, vm: str, runbook_name: str):
     def hook(status, output):
         if runbook_name == "cpu_and_jvm_logs":
-            replacement_url = "https://test-collection-21-oct-2024.s3.us-west-2.amazonaws.com/was_logs_dump/20241208174017_native_stdout.log"
-            pattern = r"(native_stdout\.log S3 URL: ).*"
-            output = re.sub(
-                pattern, rf"\1{replacement_url}", output
-            )
+            try:
+                replacement_url = "https://test-collection-21-oct-2024.s3.us-west-2.amazonaws.com/was_logs_dump/20241208174017_native_stdout.log"
+                pattern = r"(native_stdout\.log S3 URL: ).*"
+                output = re.sub(
+                    pattern, rf"\1{replacement_url}", output
+                )
 
-            log_analysis_agent = LogAnalysisAgent()
-            log_analysis_output = log_analysis_agent.analyse_logs(
-                "https://test-collection-21-oct-2024.s3.us-west-2.amazonaws.com/was_logs_dump/20241208174017_native_stdout.log",
-                500,
-            )
-            if log_analysis_output:
-                for issue in log_analysis_output.issues:
-                    output += "\n"
-                    output += "-" * 25 + "\n"
-                    output += f"Potential Issue: {issue.potential_issue}\n"
-                    output += "-" * 25 + "\n"
-                    output += f"Log Items: {issue.log_items}\n"
-                    output += "-" * 25 + "\n"
-                    output += f"Insights: {issue.insights}\n"
+                log_analysis_agent = LogAnalysisAgent()
+                log_analysis_output = log_analysis_agent.analyse_logs(
+                    "https://test-collection-21-oct-2024.s3.us-west-2.amazonaws.com/was_logs_dump/20241208174017_native_stdout.log",
+                    500,
+                )
+                if log_analysis_output:
+                    for issue in log_analysis_output.issues:
+                        output += "\n"
+                        output += "-" * 25 + "\n"
+                        output += f"Potential Issue: {issue.potential_issue}\n"
+                        output += "-" * 25 + "\n"
+                        output += f"Log Items: {issue.log_items}\n"
+                        output += "-" * 25 + "\n"
+                        output += f"Insights: {issue.insights}\n"
+            except Exception:
+                pass
         update_incident_table("completed", output, sys_id, runbook_name)
         return update_description(
             status,
@@ -304,6 +307,8 @@ def update_description(status, output, instance_url, sys_id, username, password)
     payload = {
         "description": f"{current_description}-----------------------------------\nJob execution status : {status} at {datetime.now().strftime("%d-%m-%Y %H:%M")} \n\nOutput:\n{output}\n-----------------------------------\n"
     }
+    if "resolving" in output.lower():
+        payload["state"] = "6"  # ServiceNow state value for 'Resolved'
 
     # Make the PUT request to update the description
     response = requests.patch(
