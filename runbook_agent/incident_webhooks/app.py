@@ -309,6 +309,8 @@ def update_description(status, output, instance_url, sys_id, username, password)
     }
     if "resolving" in output.lower():
         payload["state"] = "6"  # ServiceNow state value for 'Resolved'
+        payload["close_code"] = "Solution provided"
+        payload["close_notes"] = "Cleared temporary files"
 
     # Make the PUT request to update the description
     response = requests.patch(
