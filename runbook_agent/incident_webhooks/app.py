@@ -30,6 +30,7 @@ from prisma import Prisma
 import asyncio
 from runbook_agent.incident_webhooks.log_analysis_agent import LogAnalysisAgent
 import re
+from typing import Optional
 
 # Create a router instance
 router = APIRouter()
@@ -43,6 +44,7 @@ class Payload(BaseModel):
     description: str
     severity: str
     status: str
+    correlation_id: Optional[str]
 
 
 def init(
@@ -69,11 +71,12 @@ def init(
 
 @router.post("/service_now/webhook")
 async def receive_payload(payload: Payload, background_tasks: BackgroundTasks):
-    existing_incident = await prisma_client.incident.find_first(
-        where={
-            "url": f"https://dev209832.service-now.com/nav_to.do?uri=incident.do?sys_id={payload.sys_id}"
-        }
-    )
+    existing_incident = None
+    if payload.correlation_id:
+        existing_incident = await prisma_client.incident.find_first(
+            where={"id": payload.correlation_id}
+        )
+
     if not existing_incident:
         await prisma_client.incident.create(
             data={
@@ -89,6 +92,7 @@ async def receive_payload(payload: Payload, background_tasks: BackgroundTasks):
                 "url": f"https://dev209832.service-now.com/nav_to.do?uri=incident.do?sys_id={payload.sys_id}",
             }
         )
+
     background_tasks.add_task(take_incident_action, payload)
     return {"message": "Payload received and processing started in the background."}
 
@@ -105,7 +109,6 @@ async def take_incident_action(payload: Payload):
     )
     if selected_runbook.doc_id == "":
         return
-    print(selected_runbook, searched_runbooks)
 
     runbook_details = await repository.get_by_id(selected_runbook.doc_id)
     if runbook_details is None:
@@ -201,9 +204,7 @@ async def poll_job(id: str, sys_id: str, vm: str, runbook_name: str):
             try:
                 replacement_url = "https://test-collection-21-oct-2024.s3.us-west-2.amazonaws.com/was_logs_dump/20241208174017_native_stdout.log"
                 pattern = r"(native_stdout\.log S3 URL: ).*"
-                output = re.sub(
-                    pattern, rf"\1{replacement_url}", output
-                )
+                output = re.sub(pattern, rf"\1{replacement_url}", output)
 
                 log_analysis_agent = LogAnalysisAgent()
                 log_analysis_output = log_analysis_agent.analyse_logs(
@@ -311,7 +312,9 @@ def update_description(status, output, instance_url, sys_id, username, password)
         payload["state"] = "6"  # ServiceNow state value for 'Resolved'
         payload["close_code"] = "Solution provided"
         payload["close_notes"] = "Cleared temporary files"
-        payload["description"] = f"{current_description}-----------------------------------\nJob execution status : {status} at {datetime.now().strftime("%d-%m-%Y %H:%M")} \n\nOutput:\n{''.join(output.splitlines()[-3:])}\n-----------------------------------\n"
+        payload["description"] = (
+            f"{current_description}-----------------------------------\nJob execution status : {status} at {datetime.now().strftime("%d-%m-%Y %H:%M")} \n\nOutput:\n{''.join(output.splitlines()[-3:])}\n-----------------------------------\n"
+        )
 
     # Make the PUT request to update the description
     response = requests.patch(
